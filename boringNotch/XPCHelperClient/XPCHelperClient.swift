@@ -27,10 +27,17 @@ final class XPCHelperClient: NSObject {
         
         let conn = NSXPCConnection(serviceName: serviceName)
         
+        // 反向通道：helper 通过 remoteObjectProxy 回调本进程推送通知事件。
+        // exportedObject 指向 NotificationRelayManager.shared 单例（进程生命周期内常驻，连接同时持有强引用，不会提前释放）。
+        conn.exportedInterface = NSXPCInterface(with: NotificationRelayClientProtocol.self)
+        conn.exportedObject = NotificationRelayManager.shared
+        
         conn.interruptionHandler = { [weak self] in
             Task { @MainActor in
                 self?.connection = nil
                 self?.remoteService = nil
+                // helper 进程退出/重连后，其 AX 监听状态丢失；若通知中继在运行则重新挂接
+                NotificationRelayManager.shared.restartAfterHelperReconnect()
             }
         }
         
@@ -146,6 +153,72 @@ final class XPCHelperClient: NSObject {
         }
     }
     
+    // MARK: - Notification Relay
+    
+    /// 开始监听系统通知横幅；hideSystemBanners=true 时 helper 会把系统横幅移出屏外
+    nonisolated func startNotificationRelay(hideSystemBanners: Bool) async -> Bool {
+        do {
+            let service = await MainActor.run {
+                ensureRemoteService()
+            }
+            return try await service.withContinuation { service, continuation in
+                service.startNotificationRelay(hideSystemBanners: hideSystemBanners) { started in
+                    continuation.resume(returning: started)
+                }
+            }
+        } catch {
+            return false
+        }
+    }
+    
+    nonisolated func stopNotificationRelay() {
+        Task {
+            let service = await MainActor.run {
+                ensureRemoteService()
+            }
+            try? await service.withService { service in
+                service.stopNotificationRelay()
+            }
+        }
+    }
+    
+    /// 对指定通知的原横幅执行 AXPress（深链接跳转）
+    nonisolated func pressNotificationBanner(_ id: String) async -> Bool {
+        do {
+            let service = await MainActor.run {
+                ensureRemoteService()
+            }
+            return try await service.withContinuation { service, continuation in
+                service.pressNotificationBanner(id) { success in
+                    continuation.resume(returning: success)
+                }
+            }
+        } catch {
+            return false
+        }
+    }
+
+    // MARK: - Kimi Code Credentials
+
+    /// 通过非沙盒 XPC helper 代读本机 Kimi Code 配置中的 AI 凭证。
+    /// 返回 [String: String]，可能包含 glmAPIKey / kimiAPIKey / kimiAccessToken / kimiRefreshToken。
+    /// 异常或失败时返回空字典；凭证内容绝不进日志。
+    nonisolated func readKimiCodeCredentials() async -> [String: String] {
+        do {
+            let service = await MainActor.run {
+                ensureRemoteService()
+            }
+            let result: NSDictionary = try await service.withContinuation { service, continuation in
+                service.readKimiCodeCredentials { dict in
+                    continuation.resume(returning: dict)
+                }
+            }
+            return result as? [String: String] ?? [:]
+        } catch {
+            return [:]
+        }
+    }
+
     // MARK: - Keyboard Brightness
     
     nonisolated func isKeyboardBrightnessAvailable() async -> Bool {

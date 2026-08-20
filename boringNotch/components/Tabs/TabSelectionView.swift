@@ -16,11 +16,14 @@ struct TabModel: Identifiable {
 
 let tabs = [
     TabModel(label: "Home", icon: "house.fill", view: .home),
-    TabModel(label: "Shelf", icon: "tray.fill", view: .shelf)
+    TabModel(label: "Shelf", icon: "tray.fill", view: .shelf),
+    TabModel(label: "Notifications", icon: "bell.fill", view: .notifications),
+    TabModel(label: "Token", icon: "gauge", view: .token)
 ]
 
 struct TabSelectionView: View {
     @ObservedObject var coordinator = BoringViewCoordinator.shared
+    @ObservedObject private var notificationRelay = NotificationRelayManager.shared
     @Namespace var animation
     var body: some View {
         HStack(spacing: 0) {
@@ -32,6 +35,15 @@ struct TabSelectionView: View {
                     }
                     .frame(height: 26)
                     .foregroundStyle(tab.view == coordinator.currentView ? .white : .gray)
+                    // 通知 tab：有活跃通知时显示红点
+                    .overlay(alignment: .topTrailing) {
+                        if tab.view == .notifications && !notificationRelay.groups.isEmpty {
+                            Circle()
+                                .fill(.red)
+                                .frame(width: 6, height: 6)
+                                .offset(x: -8, y: 2)
+                        }
+                    }
                     .background {
                         if tab.view == coordinator.currentView {
                             Capsule()

@@ -35,6 +35,32 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
             reply(AXIsProcessTrusted())
         }
     }
+
+    // MARK: - Notification Relay (AX observation of system banners, event-driven)
+
+    @objc func startNotificationRelay(hideSystemBanners: Bool, with reply: @escaping (Bool) -> Void) {
+        guard AXIsProcessTrusted() else {
+            NSLog("[NotificationRelay] start rejected: process not AX-trusted")
+            reply(false)
+            return
+        }
+        // AX observers deliver on the main runloop; hop there for all relay state changes.
+        DispatchQueue.main.async {
+            reply(NotificationRelayService.shared.start(hideSystemBanners: hideSystemBanners))
+        }
+    }
+
+    @objc func stopNotificationRelay() {
+        DispatchQueue.main.async {
+            NotificationRelayService.shared.stop()
+        }
+    }
+
+    @objc func pressNotificationBanner(_ id: String, with reply: @escaping (Bool) -> Void) {
+        DispatchQueue.main.async {
+            reply(NotificationRelayService.shared.pressBanner(id: id))
+        }
+    }
     
     private class KeyboardBrightnessClient {
         private static let keyboardID: UInt64 = 1
@@ -187,5 +213,92 @@ class BoringNotchXPCHelper: NSObject, BoringNotchXPCHelperProtocol {
             }
             return nil
         }()
+    }
+
+    // MARK: - Kimi Code credential reader
+
+    private func credentialsLog(_ message: String) {
+        // 仅记录状态，绝不记录任何凭证内容或片段。
+        NSLog("[CredentialReader] %@", message)
+    }
+
+    @objc func readKimiCodeCredentials(with reply: @escaping (NSDictionary) -> Void) {
+        DispatchQueue.global(qos: .userInitiated).async {
+            let result = NSMutableDictionary()
+            let home = FileManager.default.homeDirectoryForCurrentUser
+            let configURL = home.appendingPathComponent(".kimi-code/config.toml")
+            let credentialsURL = home.appendingPathComponent(".kimi-code/credentials/kimi-code.json")
+
+            // 1. config.toml
+            if FileManager.default.fileExists(atPath: configURL.path) {
+                if let content = try? String(contentsOf: configURL, encoding: .utf8) {
+                    self.parseKimiCodeConfigTOML(content, into: result)
+                    self.credentialsLog("config.toml 读取成功")
+                } else {
+                    self.credentialsLog("config.toml 读取失败")
+                }
+            } else {
+                self.credentialsLog("config.toml 文件不存在")
+            }
+
+            // 2. credentials/kimi-code.json
+            if FileManager.default.fileExists(atPath: credentialsURL.path) {
+                if let data = try? Data(contentsOf: credentialsURL),
+                   let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] {
+                    if let accessToken = json["access_token"] as? String, !accessToken.isEmpty {
+                        result["kimiAccessToken"] = accessToken
+                    }
+                    if let refreshToken = json["refresh_token"] as? String, !refreshToken.isEmpty {
+                        result["kimiRefreshToken"] = refreshToken
+                    }
+                    self.credentialsLog("credentials/kimi-code.json 读取成功")
+                } else {
+                    self.credentialsLog("credentials/kimi-code.json 读取失败")
+                }
+            } else {
+                self.credentialsLog("credentials/kimi-code.json 文件不存在")
+            }
+
+            reply(result.copy() as! NSDictionary)
+        }
+    }
+
+    private func parseKimiCodeConfigTOML(_ content: String, into result: NSMutableDictionary) {
+        let sectionRegex = try! NSRegularExpression(
+            pattern: #"^\s*\[providers\.(?:"([^"]+)"|([^"\]]+))\]\s*$"#,
+            options: []
+        )
+        let apiKeyRegex = try! NSRegularExpression(
+            pattern: #"^\s*api_key\s*=\s*"([^"]+)"\s*$"#,
+            options: []
+        )
+
+        var currentSectionName: String?
+
+        for line in content.components(separatedBy: .newlines) {
+            let nsRange = NSRange(line.startIndex..., in: line)
+
+            if let match = sectionRegex.firstMatch(in: line, options: [], range: nsRange) {
+                let quoted = Range(match.range(at: 1), in: line).map { String(line[$0]) }
+                let unquoted = Range(match.range(at: 2), in: line).map { String(line[$0]) }
+                currentSectionName = quoted ?? unquoted
+                continue
+            }
+
+            guard let sectionName = currentSectionName else { continue }
+
+            if let match = apiKeyRegex.firstMatch(in: line, options: [], range: nsRange),
+               let keyRange = Range(match.range(at: 1), in: line) {
+                let apiKey = String(line[keyRange])
+                guard !apiKey.isEmpty else { continue }
+
+                let sectionLower = sectionName.lowercased()
+                if sectionLower.contains("zhipu") || sectionLower.contains("glm") || sectionLower.contains("bigmodel") {
+                    result["glmAPIKey"] = apiKey
+                } else if sectionLower.contains("kimi"), apiKey.hasPrefix("sk-kimi-") {
+                    result["kimiAPIKey"] = apiKey
+                }
+            }
+        }
     }
 }
