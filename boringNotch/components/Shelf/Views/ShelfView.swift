@@ -74,7 +74,10 @@ struct ShelfView: View {
                 transaction.animation = vm.animation
             }
             .contentShape(Rectangle())
-            .onTapGesture { selection.clear() }
+            .onTapGesture {
+                Haptics.play()
+                selection.clear()
+            }
     }
 
     var content: some View {

@@ -176,6 +176,7 @@ final class MediaKeyInterceptor {
     }
 
     private func playFeedbackSound() {
+        guard Defaults[.mediaKeyFeedbackSound] else { return }
         guard let feedback = UserDefaults.standard.persistentDomain(forName: "NSGlobalDomain")?["com.apple.sound.beep.feedback"] as? Int,
               feedback == 1 else { return }
 

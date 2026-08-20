@@ -14,7 +14,10 @@ struct TabButton: View {
     let onClick: () -> Void
     
     var body: some View {
-        Button(action: onClick) {
+        Button {
+            Haptics.play()
+            onClick()
+        } label: {
             Image(systemName: icon)
                 .padding(.horizontal, 15)
                 .contentShape(Capsule())

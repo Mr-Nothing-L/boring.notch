@@ -58,6 +58,7 @@ struct AlbumArtView: View {
     private var albumArtButton: some View {
         ZStack {
             Button {
+                Haptics.play()
                 musicManager.openMusicApp()
             } label: {
                 ZStack(alignment:.bottomTrailing) {
@@ -242,22 +243,27 @@ struct MusicControlsView: View {
         switch slot {
         case .shuffle:
             HoverButton(icon: "shuffle", iconColor: musicManager.isShuffled ? .red : .primary, scale: .medium) {
+                Haptics.play()
                 MusicManager.shared.toggleShuffle()
             }
         case .previous:
             HoverButton(icon: "backward.fill", scale: .medium) {
+                Haptics.play()
                 MusicManager.shared.previousTrack()
             }
         case .playPause:
             HoverButton(icon: musicManager.isPlaying ? "pause.fill" : "play.fill", scale: .large) {
+                Haptics.play()
                 MusicManager.shared.togglePlay()
             }
         case .next:
             HoverButton(icon: "forward.fill", scale: .medium) {
+                Haptics.play()
                 MusicManager.shared.nextTrack()
             }
         case .repeatMode:
             HoverButton(icon: repeatIcon, iconColor: repeatIconColor, scale: .medium) {
+                Haptics.play()
                 MusicManager.shared.toggleRepeat()
             }
         case .volume:
@@ -266,10 +272,12 @@ struct MusicControlsView: View {
             FavoriteControlButton()
         case .goBackward:
             HoverButton(icon: "gobackward.15", scale: .medium) {
+                Haptics.play()
                 MusicManager.shared.skip(seconds: -15)
             }
         case .goForward:
             HoverButton(icon: "goforward.15", scale: .medium) {
+                Haptics.play()
                 MusicManager.shared.skip(seconds: 15)
             }
         case .none:
@@ -303,6 +311,7 @@ struct FavoriteControlButton: View {
 
     var body: some View {
         HoverButton(icon: iconName, iconColor: iconColor, scale: .medium) {
+            Haptics.play()
             MusicManager.shared.toggleFavoriteTrack()
         }
         .disabled(!musicManager.canFavoriteTrack)
@@ -338,6 +347,7 @@ struct VolumeControlView: View {
     var body: some View {
         HStack(spacing: 4) {
             Button(action: {
+                Haptics.play()
                 if musicManager.volumeControlSupported {
                     withAnimation(.easeInOut(duration: 0.12)) {
                         showVolumeSlider.toggle()

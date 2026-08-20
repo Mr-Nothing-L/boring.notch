@@ -152,6 +152,7 @@ extension Defaults.Keys {
     
     // MARK: HUD
     static let hudReplacement = Key<Bool>("hudReplacement", default: false)
+    static let mediaKeyFeedbackSound = Key<Bool>("mediaKeyFeedbackSound", default: false)
     static let inlineHUD = Key<Bool>("inlineHUD", default: false)
     static let enableGradient = Key<Bool>("enableGradient", default: false)
     static let systemEventIndicatorShadow = Key<Bool>("systemEventIndicatorShadow", default: false)
@@ -162,6 +163,18 @@ extension Defaults.Keys {
     // Option key modifier behaviour for media keys
     static let optionKeyAction = Key<OptionKeyAction>("optionKeyAction", default: OptionKeyAction.openSettings)
     
+    // MARK: Notifications in Notch
+    static let notchNotificationsEnabled = Key<Bool>("notchNotificationsEnabled", default: false)
+    static let hideSystemNotificationBanners = Key<Bool>("hideSystemNotificationBanners", default: true)
+    static let notificationPeekDuration = Key<Double>("notificationPeekDuration", default: 5.0)
+
+    // MARK: AI Usage
+    static let usageDisplayEnabled = Key<Bool>("usageDisplayEnabled", default: false)
+
+    // MARK: Language
+    // "system" = follow macOS; "zh-Hans" / "en" = in-app override (requires relaunch)
+    static let appLanguage = Key<String>("appLanguage", default: "system")
+
     // MARK: Shelf
     static let boringShelf = Key<Bool>("boringShelf", default: true)
     static let openShelfByDefault = Key<Bool>("openShelfByDefault", default: true)
@@ -173,6 +186,7 @@ extension Defaults.Keys {
     
     // MARK: Calendar
     static let calendarSelectionState = Key<CalendarSelectionState>("calendarSelectionState", default: .all)
+    static let calendarViewStyle = Key<CalendarViewStyleEnum>("calendarViewStyle", default: .wheel)
     static let hideAllDayEvents = Key<Bool>("hideAllDayEvents", default: false)
     static let showFullEventTitles = Key<Bool>("showFullEventTitles", default: false)
     static let autoScrollToNextEvent = Key<Bool>("autoScrollToNextEvent", default: true)

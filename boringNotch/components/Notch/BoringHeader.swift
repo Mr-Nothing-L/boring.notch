@@ -44,6 +44,7 @@ struct BoringHeader: View {
                     } else {
                         if Defaults[.showMirror] {
                             Button(action: {
+                                Haptics.play()
                                 vm.toggleCameraPreview()
                             }) {
                                 Capsule()
@@ -60,6 +61,7 @@ struct BoringHeader: View {
                         }
                         if Defaults[.settingsIconInNotch] {
                             Button(action: {
+                                Haptics.play()
                                 DispatchQueue.main.async {
                                     SettingsWindowController.shared.showWindow()
                                 }
@@ -88,6 +90,9 @@ struct BoringHeader: View {
                                 timeToFullCharge: batteryModel.timeToFullCharge,
                                 isForNotification: false
                             )
+                            .simultaneousGesture(TapGesture().onEnded {
+                                Haptics.play()
+                            })
                         }
                     }
                 }

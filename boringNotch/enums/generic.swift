@@ -27,6 +27,8 @@ public enum NotchState {
 public enum NotchViews {
     case home
     case shelf
+    case notifications
+    case token
 }
 
 enum SettingsEnum {
@@ -49,6 +51,11 @@ enum DownloadIconStyle: String, Defaults.Serializable {
     case onlyAppIcon = "Only app icon"
     case onlyIcon = "Only download icon"
     case iconAndAppIcon = "Icon and app icon"
+}
+
+enum CalendarViewStyleEnum: String, Defaults.Serializable {
+    case wheel = "Wheel"
+    case month = "Month"
 }
 
 enum MirrorShapeEnum: String, Defaults.Serializable {
