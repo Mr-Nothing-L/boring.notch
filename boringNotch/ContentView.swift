@@ -20,9 +20,11 @@ struct ContentView: View {
 
     @ObservedObject var coordinator = BoringViewCoordinator.shared
     @ObservedObject var musicManager = MusicManager.shared
+    @ObservedObject var usageManager = UsageManager.shared
     @ObservedObject var batteryModel = BatteryStatusViewModel.shared
     @ObservedObject var brightnessManager = BrightnessManager.shared
     @ObservedObject var volumeManager = VolumeManager.shared
+    @ObservedObject private var notificationRelay = NotificationRelayManager.shared
     @State private var hoverTask: Task<Void, Never>?
     @State private var isHovering: Bool = false
     @State private var anyDropDebounceTask: Task<Void, Never>?
@@ -70,6 +72,10 @@ struct ContentView: View {
             && coordinator.musicLiveActivityEnabled && !vm.hideOnClosed
         {
             chinWidth += (2 * max(0, vm.effectiveClosedNotchHeight - 12) + 20)
+        } else if vm.notchState == .closed && Defaults[.usageDisplayEnabled]
+            && usageManager.hasAnyConfig && musicManager.isPlayerIdle
+        {
+            chinWidth += 190
         } else if !coordinator.expandingView.show && vm.notchState == .closed
             && (!musicManager.isPlaying && musicManager.isPlayerIdle) && Defaults[.showNotHumanFace]
             && !vm.hideOnClosed
@@ -122,10 +128,12 @@ struct ContentView: View {
                     .conditionalModifier(true) { view in
                         let openAnimation = Animation.spring(response: 0.42, dampingFraction: 0.8, blendDuration: 0)
                         let closeAnimation = Animation.spring(response: 0.45, dampingFraction: 1.0, blendDuration: 0)
-                        
+
                         return view
                             .animation(vm.notchState == .open ? openAnimation : closeAnimation, value: vm.notchState)
                             .animation(.smooth, value: gestureProgress)
+                            // 通知到达/消失时刘海向下延展/收起的弹性动效
+                            .animation(.spring(response: 0.38, dampingFraction: 0.8), value: notificationRelay.groups)
                     }
                     .contentShape(Rectangle())
                     .onHover { hovering in
@@ -195,6 +203,7 @@ struct ContentView: View {
                         //                    }
                         //                    .keyboardShortcut("E", modifiers: .command)
                     }
+                // （通知卡片曾放这里，现改为内联在刘海行中，见 NotchLayout 分支）
                 if vm.chinHeight > 0 {
                     Rectangle()
                         .fill(Color.black.opacity(0.01))
@@ -284,6 +293,17 @@ struct ContentView: View {
                             .frame(width: 76, alignment: .trailing)
                         }
                         .frame(height: vm.effectiveClosedNotchHeight, alignment: .center)
+                      } else if vm.notchState == .closed && notificationRelay.peekVisible {
+                          // 通知优先于 InlineHUD / 音乐 live activity：刘海向下延展显示通知预览行。
+                          // 注意：不受 hideOnClosed（全屏隐藏刘海）影响——通知优先级高于全屏隐藏。
+                          NotificationPeekView()
+                              .frame(alignment: .center)
+                      } else if vm.notchState == .closed && Defaults[.usageDisplayEnabled]
+                          && usageManager.hasAnyConfig && musicManager.isPlayerIdle
+                      {
+                          // 用量环：音乐播放时让位 MusicLiveActivity，用量优先于 InlineHUD / 脸谱。
+                          UsageRingsView()
+                              .frame(alignment: .center)
                       } else if coordinator.sneakPeek.show && Defaults[.inlineHUD] && (coordinator.sneakPeek.type != .music) && (coordinator.sneakPeek.type != .battery) && vm.notchState == .closed {
                           InlineHUD(type: $coordinator.sneakPeek.type, value: $coordinator.sneakPeek.value, icon: $coordinator.sneakPeek.icon, hoverAnimation: $isHovering, gestureProgress: $gestureProgress)
                               .transition(.opacity)
@@ -349,6 +369,10 @@ struct ContentView: View {
                         NotchHomeView(albumArtNamespace: albumArtNamespace)
                     case .shelf:
                         ShelfView()
+                    case .notifications:
+                        NotificationsView()
+                    case .token:
+                        UsageDetailView()
                     }
                 }
                 .transition(
@@ -525,17 +549,19 @@ struct ContentView: View {
             
             guard vm.notchState == .closed,
                   !coordinator.sneakPeek.show,
+                  !notificationRelay.isHoveringNotificationPeek,
                   Defaults[.openNotchOnHover] else { return }
-            
+
             hoverTask = Task {
                 try? await Task.sleep(for: .seconds(Defaults[.minimumHoverDuration]))
                 guard !Task.isCancelled else { return }
-                
+
                 await MainActor.run {
                     guard self.vm.notchState == .closed,
                           self.isHovering,
+                          !self.notificationRelay.isHoveringNotificationPeek,
                           !self.coordinator.sneakPeek.show else { return }
-                    
+
                     self.doOpen()
                 }
             }

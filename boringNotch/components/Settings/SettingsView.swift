@@ -45,6 +45,12 @@ struct SettingsView: View {
                 NavigationLink(value: "Battery") {
                     Label("Battery", systemImage: "battery.100.bolt")
                 }
+                NavigationLink(value: "Notifications") {
+                    Label("Notifications", systemImage: "bell")
+                }
+                NavigationLink(value: "Usage") {
+                    Label("Usage", systemImage: "gauge")
+                }
 //                NavigationLink(value: "Downloads") {
 //                    Label("Downloads", systemImage: "square.and.arrow.down")
 //                }
@@ -83,6 +89,10 @@ struct SettingsView: View {
                     HUD()
                 case "Battery":
                     Charge()
+                case "Notifications":
+                    NotificationSettings()
+                case "Usage":
+                    UsageSettings()
                 case "Shelf":
                     Shelf()
                 case "Shortcuts":
@@ -147,10 +157,30 @@ struct GeneralSettings: View {
     @Default(.automaticallySwitchDisplay) var automaticallySwitchDisplay
     @Default(.enableGestures) var enableGestures
     @Default(.openNotchOnHover) var openNotchOnHover
-    
+    @Default(.appLanguage) var appLanguage
+
+    @State private var showRestartAlert = false
 
     var body: some View {
         Form {
+            Section {
+                Picker("Language", selection: $appLanguage) {
+                    Text("Follow system").tag("system")
+                    Text("中文").tag("zh-Hans")
+                    Text("English").tag("en")
+                }
+                .onChange(of: appLanguage) {
+                    if appLanguage == "system" {
+                        UserDefaults.standard.removeObject(forKey: "AppleLanguages")
+                    } else {
+                        UserDefaults.standard.set([appLanguage], forKey: "AppleLanguages")
+                    }
+                    showRestartAlert = true
+                }
+            } header: {
+                Text("Language")
+            }
+
             Section {
                 Toggle(isOn: Binding(
                     get: { Defaults[.menubarIcon] },
@@ -159,7 +189,7 @@ struct GeneralSettings: View {
                     Text("Show menu bar icon")
                 }
                 .tint(.effectiveAccent)
-                LaunchAtLogin.Toggle("Launch at login")
+                LaunchAtLogin.Toggle { Text("Launch at login") }
                 Defaults.Toggle(key: .showOnAllDisplays) {
                     Text("Show on all displays")
                 }
@@ -262,6 +292,14 @@ struct GeneralSettings: View {
             NotchBehaviour()
 
             gestureControls()
+        }
+        .alert("Restart required", isPresented: $showRestartAlert) {
+            Button("Restart now") {
+                ApplicationRelauncher.restart()
+            }
+            Button("Later", role: .cancel) {}
+        } message: {
+            Text("The app needs to restart to apply the language change.")
         }
         .toolbar {
             Button("Quit app") {
@@ -380,6 +418,180 @@ struct Charge: View {
         .accentColor(.effectiveAccent)
         .navigationTitle("Battery")
     }
+}
+
+struct NotificationSettings: View {
+    @Default(.notchNotificationsEnabled) var notchNotificationsEnabled
+    @Default(.hideSystemNotificationBanners) var hideSystemNotificationBanners
+    @Default(.notificationPeekDuration) var notificationPeekDuration
+
+    var body: some View {
+        Form {
+            Section {
+                Defaults.Toggle(key: .notchNotificationsEnabled) {
+                    Text("Show notifications in the notch")
+                }
+                .onChange(of: notchNotificationsEnabled) {
+                    if notchNotificationsEnabled {
+                        Task { @MainActor in
+                            let granted = await XPCHelperClient.shared.ensureAccessibilityAuthorization(promptIfNeeded: true)
+                            if !granted {
+                                Defaults[.notchNotificationsEnabled] = false
+                            }
+                        }
+                    }
+                }
+                Defaults.Toggle(key: .hideSystemNotificationBanners) {
+                    Text("Hide system notification banners")
+                }
+                .disabled(!notchNotificationsEnabled)
+                Slider(value: $notificationPeekDuration, in: 3...10, step: 1) {
+                    HStack {
+                        Text("Auto-dismiss after")
+                        Spacer()
+                        Text("\(notificationPeekDuration, specifier: "%.0f")s")
+                            .foregroundStyle(.secondary)
+                    }
+                }
+                .disabled(!notchNotificationsEnabled)
+            } header: {
+                Text("Notifications")
+            } footer: {
+                Text(
+                    "Accessibility access is required to show notifications. When Focus mode hides system notification banners, the notch won't show them either."
+                )
+                .multilineTextAlignment(.trailing)
+                .foregroundStyle(.secondary)
+                .font(.caption)
+            }
+        }
+        .accentColor(.effectiveAccent)
+        .navigationTitle("Notifications")
+    }
+}
+
+struct UsageSettings: View {
+    @Default(.usageDisplayEnabled) var usageDisplayEnabled
+    @ObservedObject var usageManager = UsageManager.shared
+
+    @State private var glmKeyInput: String = ""
+    @State private var kimiKeyInput: String = ""
+    @FocusState private var glmFieldFocused: Bool
+    @FocusState private var kimiFieldFocused: Bool
+
+    var body: some View {
+        Form {
+            Section {
+                Defaults.Toggle(key: .usageDisplayEnabled) {
+                    Text("Show AI usage in the notch")
+                }
+                .onChange(of: usageDisplayEnabled) {
+                    if usageDisplayEnabled {
+                        Defaults[.showNotHumanFace] = false
+                    }
+                }
+            } header: {
+                Text("Usage")
+            } footer: {
+                Text("Turning this on has disabled the fun face animation to make room.")
+                    .multilineTextAlignment(.trailing)
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
+
+            Section {
+                SecureField("GLM API Key (optional)", text: $glmKeyInput)
+                    .focused($glmFieldFocused)
+                    .onSubmit { saveGLMKey() }
+                    .onChange(of: glmFieldFocused) {
+                        if !glmFieldFocused { saveGLMKey() }
+                    }
+                Text(sourceDescription(usageManager.credentialSources["glm"]))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let status = statusText(for: usageManager.glm), !status.isEmpty {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("GLM")
+            }
+
+            Section {
+                SecureField("Kimi API Key (optional)", text: $kimiKeyInput)
+                    .focused($kimiFieldFocused)
+                    .onSubmit { saveKimiKey() }
+                    .onChange(of: kimiFieldFocused) {
+                        if !kimiFieldFocused { saveKimiKey() }
+                    }
+                Text(sourceDescription(usageManager.credentialSources["kimi"]))
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
+                if let status = statusText(for: usageManager.kimi), !status.isEmpty {
+                    Text(status)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+            } header: {
+                Text("Kimi")
+            }
+
+            Section {
+                EmptyView()
+            } footer: {
+                Text("Keys are stored only in macOS Keychain and are never uploaded.")
+                    .multilineTextAlignment(.trailing)
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
+        }
+        .accentColor(.effectiveAccent)
+        .navigationTitle("Usage")
+        .onAppear {
+            Task {
+                await usageManager.refreshCredentialSources()
+            }
+            glmKeyInput = KeychainHelper.read(.glmAPIKey) ?? ""
+            kimiKeyInput = KeychainHelper.read(.kimiAPIKey) ?? ""
+        }
+    }
+
+    private func saveGLMKey() {
+        saveKey(glmKeyInput, account: .glmAPIKey)
+    }
+
+    private func saveKimiKey() {
+        saveKey(kimiKeyInput, account: .kimiAPIKey)
+    }
+
+    private func saveKey(_ value: String, account: KeychainHelper.Account) {
+        if value.isEmpty {
+            KeychainHelper.delete(account)
+        } else {
+            KeychainHelper.save(value, for: account)
+        }
+        Task {
+            await usageManager.refreshCredentialSources()
+        }
+    }
+
+    private func sourceDescription(_ source: String?) -> String {
+        switch source {
+        case "keychain":
+            return "Entered manually (stored in Keychain)"
+        case "local":
+            return "Auto-read from Kimi Code config"
+        default:
+            return "Not configured"
+        }
+    }
+
+    private func statusText(for usage: ModelUsage?) -> String? {
+        guard let usage else { return nil }
+        return usage.membershipNote ?? usage.lastError
+    }
+
 }
 
 //struct Downloads: View {
@@ -507,6 +719,18 @@ struct HUD: View {
                     .padding(.top, 6)
                 }
             }
+            
+            Section {
+                Defaults.Toggle(key: .mediaKeyFeedbackSound) {
+                    Text("Play sound on volume keys")
+                }
+            } footer: {
+                Text("Plays a feedback sound when pressing volume keys; may trigger Bluetooth headphones to switch from your other devices.")
+                    .multilineTextAlignment(.trailing)
+                    .foregroundStyle(.secondary)
+                    .font(.caption)
+            }
+            .disabled(!hudReplacement)
             
             Section {
                 Picker("Option key behaviour", selection: $optionKeyAction) {
@@ -713,11 +937,16 @@ struct CalendarSettings: View {
     @Default(.hideCompletedReminders) var hideCompletedReminders
     @Default(.hideAllDayEvents) var hideAllDayEvents
     @Default(.autoScrollToNextEvent) var autoScrollToNextEvent
+    @Default(.calendarViewStyle) var calendarViewStyle
 
     var body: some View {
         Form {
             Defaults.Toggle(key: .showCalendar) {
                 Text("Show calendar")
+            }
+            Picker("Calendar style", selection: $calendarViewStyle) {
+                Text("Wheel").tag(CalendarViewStyleEnum.wheel)
+                Text("Month").tag(CalendarViewStyleEnum.month)
             }
             Defaults.Toggle(key: .hideCompletedReminders) {
                 Text("Hide completed reminders")

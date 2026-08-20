@@ -1,0 +1,12 @@
+{
+  "images" : [
+    {
+      "filename" : "glm-logo.png",
+      "idiom" : "universal"
+    }
+  ],
+  "info" : {
+    "author" : "xcode",
+    "version" : 1
+  }
+}

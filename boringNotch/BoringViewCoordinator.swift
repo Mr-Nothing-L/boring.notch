@@ -100,6 +100,8 @@ class BoringViewCoordinator: ObservableObject {
     @Published var optionKeyPressed: Bool = true
     private var accessibilityObserver: Any?
     private var hudReplacementCancellable: AnyCancellable?
+    private var notificationsEnabledCancellable: AnyCancellable?
+    private var usageDisplayEnabledCancellable: AnyCancellable?
 
     private init() {
         // Perform migration from name-based to UUID-based storage
@@ -161,6 +163,30 @@ class BoringViewCoordinator: ObservableObject {
                 }
             }
 
+        // Observe changes to notchNotificationsEnabled
+        notificationsEnabledCancellable = Defaults.publisher(.notchNotificationsEnabled)
+            .sink { change in
+                Task { @MainActor in
+                    if change.newValue {
+                        NotificationRelayManager.shared.start()
+                    } else {
+                        NotificationRelayManager.shared.stop()
+                    }
+                }
+            }
+
+        // Observe changes to usageDisplayEnabled
+        usageDisplayEnabledCancellable = Defaults.publisher(.usageDisplayEnabled)
+            .sink { change in
+                Task { @MainActor in
+                    if change.newValue {
+                        UsageManager.shared.start()
+                    } else {
+                        UsageManager.shared.stop()
+                    }
+                }
+            }
+
         Task { @MainActor in
             helloAnimationRunning = firstLaunch
 
@@ -171,6 +197,25 @@ class BoringViewCoordinator: ObservableObject {
                 } else {
                     await MediaKeyInterceptor.shared.start(promptIfNeeded: false)
                 }
+            }
+
+            if Defaults[.notchNotificationsEnabled] {
+                // helper 冷启动较慢时 XPC 检查可能暂时失败，重试几次再判定，避免误关开关
+                var authorized = false
+                for _ in 0..<5 {
+                    authorized = await XPCHelperClient.shared.isAccessibilityAuthorized()
+                    if authorized { break }
+                    try? await Task.sleep(for: .seconds(1.5))
+                }
+                if !authorized {
+                    Defaults[.notchNotificationsEnabled] = false
+                } else {
+                    NotificationRelayManager.shared.start()
+                }
+            }
+
+            if Defaults[.usageDisplayEnabled] {
+                UsageManager.shared.start()
             }
         }
     }
