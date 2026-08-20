@@ -181,50 +181,59 @@ struct WheelPicker: View {
 struct CalendarView: View {
     @EnvironmentObject var vm: BoringViewModel
     @ObservedObject private var calendarManager = CalendarManager.shared
+    @Default(.calendarViewStyle) private var calendarViewStyle
     @State private var selectedDate = Date()
 
     var body: some View {
         VStack(spacing: 0) {
-            HStack(alignment: .top, spacing: 8) {
-                VStack(alignment: .leading) {
-                    Text(selectedDate.formatted(.dateTime.month(.abbreviated)))
-                        .font(.title3)
-                        .fontWeight(.semibold)
-                        .foregroundColor(.white)
-                    Text(selectedDate.formatted(.dateTime.year()))
-                        .font(.title3)
-                        .fontWeight(.light)
-                        .foregroundColor(Color(white: 0.65))
-                }
+            if calendarViewStyle == .month {
+                // 月历模式只渲染纯月历格子（对齐 macOS 日历小组件样式），
+                // 不再显示下方日程区，避免内容被刘海底边裁切
+                MonthCalendarView(selectedDate: $selectedDate)
+                    .padding(.bottom, 4)
+            } else {
+                HStack(alignment: .top, spacing: 8) {
+                    VStack(alignment: .leading) {
+                        Text(selectedDate.formatted(.dateTime.month(.abbreviated)))
+                            .font(.title3)
+                            .fontWeight(.semibold)
+                            .foregroundColor(.white)
+                        Text(selectedDate.formatted(.dateTime.year()))
+                            .font(.title3)
+                            .fontWeight(.light)
+                            .foregroundColor(Color(white: 0.65))
+                    }
 
-                ZStack(alignment: .top) {
-                    WheelPicker(selectedDate: $selectedDate, config: Config())
-                    HStack(alignment: .top) {
-                        LinearGradient(
-                            colors: [Color.black, .clear], startPoint: .leading, endPoint: .trailing
-                        )
-                        .frame(width: 20)
-                        Spacer()
-                        LinearGradient(
-                            colors: [.clear, Color.black], startPoint: .leading, endPoint: .trailing
-                        )
-                        .frame(width: 20)
+                    ZStack(alignment: .top) {
+                        WheelPicker(selectedDate: $selectedDate, config: Config())
+                        HStack(alignment: .top) {
+                            LinearGradient(
+                                colors: [Color.black, .clear], startPoint: .leading, endPoint: .trailing
+                            )
+                            .frame(width: 20)
+                            Spacer()
+                            LinearGradient(
+                                colors: [.clear, Color.black], startPoint: .leading, endPoint: .trailing
+                            )
+                            .frame(width: 20)
+                        }
                     }
                 }
-            }
 
-            let filteredEvents = EventListView.filteredEvents(
-                events: calendarManager.events
-            )
-            if filteredEvents.isEmpty {
-                EmptyEventsView(selectedDate: selectedDate)
-                Spacer(minLength: 0)
-            } else {
-                EventListView(events: calendarManager.events)
+                let filteredEvents = EventListView.filteredEvents(
+                    events: calendarManager.events
+                )
+                if filteredEvents.isEmpty {
+                    EmptyEventsView(selectedDate: selectedDate)
+                    Spacer(minLength: 0)
+                } else {
+                    EventListView(events: calendarManager.events)
+                }
             }
         }
         .listRowBackground(Color.clear)
-        .frame(height: 120)
+        // 月历样式内容更高，给一点额外高度；Wheel 保持原有 120
+        .frame(height: calendarViewStyle == .month ? 130 : 120)
         .onChange(of: selectedDate) {
             Task {
                 await calendarManager.updateCurrentDate(selectedDate)
