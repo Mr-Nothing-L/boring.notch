@@ -18,6 +18,57 @@
   </a>
 </p>
 
+---
+
+## ✨ 本 Fork 新增功能 / What's New in This Fork
+
+> 以下功能由本 fork 开发，技术细节见 [docs/notification-feature.md](docs/notification-feature.md)。
+> These features were developed in this fork — see [docs/notification-feature.md](docs/notification-feature.md) for technical details.
+
+### 🔔 系统通知整合刘海 / Notifications in the Notch
+
+系统横幅通知实时显示在刘海：闭合态向下延展预览，展开后有独立「通知」tab 卡片页（按 app 合并 ×N、时间戳、点击跳转来源 app、一键清空），可选择隐藏系统横幅。
+System notification banners appear right in the notch — a peek row drops down when closed, and a dedicated tab collects cards with per-app grouping, timestamps, click-to-jump, and clear-all.
+
+<p align="center">
+  <img src="docs/media/feature-notification-peek.png" alt="Notification peek" width="480">
+  <img src="docs/media/feature-notifications-page.png" alt="Notification cards" width="480">
+</p>
+
+### 📊 AI 用量圆环 / AI Usage Rings
+
+闭合态刘海常驻显示 Kimi Code / GLM Coding Plan 用量：蓝环 = 周额度，绿环 = 5 小时窗口（显示剩余量）。Token tab 提供详情与历史曲线；凭证自动读取本机 CLI 配置，或手动输入存入 macOS Keychain。
+Live usage rings for Kimi Code & GLM Coding Plan on the closed notch: blue = weekly quota, green = 5-hour window (remaining). A Token tab shows details and history charts; credentials are auto-read from the local CLI config or stored in macOS Keychain.
+
+<p align="center">
+  <img src="docs/media/feature-rings-closed.png" alt="Usage rings" width="480">
+  <img src="docs/media/feature-token-page.png" alt="Usage details" width="480">
+</p>
+
+### 📅 月历视图 / Month Calendar View
+
+日历可在周视图滚轮与月历格子之间切换（农历、今天高亮、点选日期）。
+The calendar can switch between the classic week wheel and a month grid (lunar date, today highlight, tap-to-select).
+
+<p align="center">
+  <img src="docs/media/feature-calendar-month.png" alt="Month calendar" width="480">
+</p>
+
+### 🌐 中英切换与其他 / Language Switch & More
+
+- 设置界面支持应用内切换 中文 / English（重启生效），并补全了简体中文翻译
+- 刘海内所有点击支持触控板震动反馈（可关）
+- 音量键提示音独立开关（默认关闭，避免触发蓝牙耳机自动切换设备）
+- In-app 中文/English switch (restart required) with completed Simplified Chinese translations
+- Haptic feedback on every notch click (optional)
+- Volume-key sound toggle (off by default, avoids Bluetooth earbud auto-switching)
+
+<p align="center">
+  <img src="docs/media/feature-settings-usage.png" alt="Usage settings" width="480">
+</p>
+
+---
+
 <!--Welcome to **Boring.Notch**, the coolest way to make your MacBook's notch the star of the show! Forget about those boring status bars—our notch turns into a dynamic music control center, complete with a snazzy visualizer and all the music controls you need. It's like having a mini concert right at the top of your screen! -->
 
 Say hello to **Boring Notch**, the coolest way to make your MacBook’s notch the star of the show! Say goodbye to boring status bars: with Boring Notch, your notch transforms into a dynamic music control center, complete with a vibrant visualizer and all the essential music controls you need. But that’s just the start! Boring Notch also offers calendar integration, a handy file shelf with AirDrop support, a complete MacOS HUD replacement and more!
