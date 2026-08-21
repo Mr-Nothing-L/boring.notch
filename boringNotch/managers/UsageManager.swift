@@ -7,7 +7,7 @@
 //  【接口契约 — 并行开发约定，签名不可改】
 //  - `UsageManager.shared` 单例，@MainActor
 //  - `@Published kimi / glm: ModelUsage?`：两模型最新用量
-//  - `@Published history: [UsageSnapshot]`：7 天历史快照（折线图用）
+//  - `@Published history: [UsageSnapshot]`：7 天历史快照（详情页按天聚合画柱状图）
 //  - `hasAnyConfig: Bool`：任一模型已配置凭证
 //  - `start() / stop()`：由协调器按 Defaults[.usageDisplayEnabled] 驱动；每 5 分钟轮询
 //  - `refresh()`：手动刷新（Token 页刷新按钮）
@@ -38,7 +38,7 @@ struct ModelUsage: Equatable {
     var updatedAt: Date?
 }
 
-/// 历史快照点（折线图用）
+/// 历史快照点（详情页按天聚合画柱状图）
 struct UsageSnapshot: Codable, Equatable, Identifiable {
     var id: Date { t }
     let t: Date

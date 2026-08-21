@@ -7,7 +7,7 @@
 //  【接口契约 — 并行开发约定】
 //  - `UsageDetailView()`：由 ContentView tab switch 的 .token 分支渲染
 //  - 每模型一张卡片（5h/周窗口详情、总额度备注、updatedAt、手动刷新）
-//  - 历史曲线区：Swift Charts，蓝线=周用量%、绿线=5h 用量%
+//  - 历史柱状图区：Swift Charts 按天聚合（固定最近 7 天，无采样补 0），Kimi/GLM 并排，蓝柱=周用量%，悬停高亮 + tooltip
 //  - 数据读 UsageManager.shared（kimi / glm / history）
 //
 
@@ -44,17 +44,25 @@ struct UsageDetailView: View {
         }
     }
 
-    // MARK: - 历史曲线
+    // MARK: - 历史柱状图
 
     private var historySection: some View {
         VStack(alignment: .leading, spacing: 10) {
-            Text("usage.history.title")
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.white)
+            HStack {
+                Text("usage.history.title")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.white)
+
+                Spacer(minLength: 0)
+
+                Text("usage.history.last7days")
+                    .font(.system(size: 10))
+                    .foregroundStyle(.gray)
+            }
 
             if usage.history.isEmpty {
                 VStack(spacing: 8) {
-                    Image(systemName: "chart.line.uptrend.xyaxis")
+                    Image(systemName: "chart.bar.xaxis")
                         .font(.title2)
                         .foregroundStyle(.gray)
                     Text("usage.history.collecting")
@@ -67,18 +75,16 @@ struct UsageDetailView: View {
                         .fill(.white.opacity(0.06))
                 }
             } else {
-                VStack(spacing: 12) {
+                HStack(alignment: .top, spacing: 12) {
                     UsageHistoryChart(
                         title: "Kimi",
                         data: usage.history,
-                        fiveHourKey: \.kimi5h,
                         weeklyKey: \.kimiWeek
                     )
 
                     UsageHistoryChart(
                         title: "GLM",
                         data: usage.history,
-                        fiveHourKey: \.glm5h,
                         weeklyKey: \.glmWeek
                     )
                 }
@@ -310,13 +316,39 @@ private struct UsageWindowRow: View {
     }
 }
 
-// MARK: - 历史曲线
+// MARK: - 历史柱状图
+
+/// 按天聚合后的数据点（固定最近 7 天，无采样的天 value = 0）
+private struct DailyUsagePoint: Identifiable {
+    var id: Date { day }
+    let day: Date
+    var value: Double = 0
+}
 
 private struct UsageHistoryChart: View {
     let title: String
     let data: [UsageSnapshot]
-    let fiveHourKey: KeyPath<UsageSnapshot, Double?>
     let weeklyKey: KeyPath<UsageSnapshot, Double?>
+
+    @State private var selectedDay: Date?
+
+    /// 固定最近 7 天日期桶；每天取当天最后一次非空 weekly 采样，无采样为 0
+    private var dailyPoints: [DailyUsagePoint] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        var points = (0 ... 6).map { offset -> DailyUsagePoint in
+            let day = calendar.date(byAdding: .day, value: offset - 6, to: today) ?? today
+            return DailyUsagePoint(day: day)
+        }
+        let indexByDay = Dictionary(uniqueKeysWithValues: points.enumerated().map { ($1.day, $0) })
+        for snapshot in data where snapshot.t >= points[0].day {
+            let day = calendar.startOfDay(for: snapshot.t)
+            guard let index = indexByDay[day],
+                  let value = snapshot[keyPath: weeklyKey] else { continue }
+            points[index].value = value
+        }
+        return points
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -324,31 +356,38 @@ private struct UsageHistoryChart: View {
                 .font(.system(size: 12, weight: .semibold))
                 .foregroundStyle(.white)
 
-            Chart(data) { snapshot in
-                if let week = snapshot[keyPath: weeklyKey] {
-                    LineMark(
-                        x: .value("usage.history.time", snapshot.t),
-                        y: .value("usage.history.weekly", week)
-                    )
-                    .foregroundStyle(.blue)
-                    .lineStyle(StrokeStyle(lineWidth: 1.5))
-                }
+            Chart(dailyPoints) { point in
+                BarMark(
+                    x: .value("usage.history.day", point.day, unit: .day),
+                    y: .value("usage.history.weekly", point.value)
+                )
+                .foregroundStyle(.blue)
+                .opacity(selectedDay == nil || selectedDay == point.day ? 1.0 : 0.35)
 
-                if let five = snapshot[keyPath: fiveHourKey] {
-                    LineMark(
-                        x: .value("usage.history.time", snapshot.t),
-                        y: .value("usage.history.fiveHour", five)
-                    )
-                    .foregroundStyle(.green)
-                    .lineStyle(StrokeStyle(lineWidth: 1.5))
+                if let selectedDay {
+                    RuleMark(x: .value("usage.history.selected", selectedDay, unit: .day))
+                        .foregroundStyle(.clear)
+                        .annotation(position: .top, spacing: 4) {
+                            if let point = dailyPoints.first(where: { $0.day == selectedDay }) {
+                                Text("\(selectedDay, format: .dateTime.month().day()) \(Int(point.value))%")
+                                    .font(.system(size: 9, weight: .medium))
+                                    .foregroundStyle(.white)
+                                    .padding(.horizontal, 6)
+                                    .padding(.vertical, 3)
+                                    .background {
+                                        Capsule()
+                                            .fill(.black.opacity(0.85))
+                                    }
+                            }
+                        }
                 }
             }
-            .chartYScale(domain: 0...100)
+            .chartYScale(domain: 0 ... 100)
             .chartXAxis {
-                AxisMarks(values: .automatic(desiredCount: 3)) { value in
+                AxisMarks(values: dailyPoints.map(\.day)) { value in
                     AxisValueLabel {
                         if let date = value.as(Date.self) {
-                            Text(date, format: .dateTime.hour().minute())
+                            Text(date, format: .dateTime.month(.abbreviated).day())
                                 .font(.system(size: 8))
                                 .foregroundStyle(.gray)
                         }
@@ -366,8 +405,30 @@ private struct UsageHistoryChart: View {
                     }
                 }
             }
+            .chartOverlay { proxy in
+                GeometryReader { geo in
+                    Rectangle()
+                        .fill(.clear)
+                        .contentShape(Rectangle())
+                        .onContinuousHover { phase in
+                            switch phase {
+                            case .active(let location):
+                                guard let plotAnchor = proxy.plotFrame else { return }
+                                let plotOrigin = geo[plotAnchor].origin
+                                if let date: Date = proxy.value(atX: location.x - plotOrigin.x) {
+                                    let calendar = Calendar.current
+                                    selectedDay = calendar.startOfDay(for: date)
+                                }
+                            case .ended:
+                                selectedDay = nil
+                            }
+                        }
+                }
+            }
+            .animation(.easeInOut(duration: 0.15), value: selectedDay)
             .frame(height: 90)
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
