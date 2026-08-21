@@ -6,8 +6,9 @@
 //
 //  【接口契约 — 并行开发约定】
 //  - `UsageDetailView()`：由 ContentView tab switch 的 .token 分支渲染
-//  - 每模型一张卡片（5h/周窗口详情、总额度备注、updatedAt、手动刷新）
-//  - 历史柱状图区：Swift Charts 按天聚合（固定最近 7 天，无采样补 0），Kimi/GLM 并排，蓝柱=周用量%，悬停高亮 + tooltip
+//  - 每模型一张卡片（5h/周窗口详情、总额度备注、updatedAt、手动刷新），Kimi/GLM 横向并排等宽
+//  - 历史柱状图区：Swift Charts 按天聚合（固定最近 7 天，无采样补 0），Kimi/GLM 并排，蓝柱=周用量%，
+//    X 轴「M-d」短标签 45° 斜放，悬停仅改透明度 + overlay tooltip（不影响柱子几何布局）
 //  - 数据读 UsageManager.shared（kimi / glm / history）
 //
 
@@ -34,8 +35,10 @@ struct UsageDetailView: View {
     private var contentView: some View {
         ScrollView {
             VStack(spacing: 12) {
-                UsageModelCard(model: usage.kimi, defaultName: "Kimi")
-                UsageModelCard(model: usage.glm, defaultName: "GLM")
+                HStack(alignment: .top, spacing: 12) {
+                    UsageModelCard(model: usage.kimi, defaultName: "Kimi")
+                    UsageModelCard(model: usage.glm, defaultName: "GLM")
+                }
 
                 historySection
             }
@@ -363,33 +366,18 @@ private struct UsageHistoryChart: View {
                 )
                 .foregroundStyle(.blue)
                 .opacity(selectedDay == nil || selectedDay == point.day ? 1.0 : 0.35)
-
-                if let selectedDay {
-                    RuleMark(x: .value("usage.history.selected", selectedDay, unit: .day))
-                        .foregroundStyle(.clear)
-                        .annotation(position: .top, spacing: 4) {
-                            if let point = dailyPoints.first(where: { $0.day == selectedDay }) {
-                                Text("\(selectedDay, format: .dateTime.month().day()) \(Int(point.value))%")
-                                    .font(.system(size: 9, weight: .medium))
-                                    .foregroundStyle(.white)
-                                    .padding(.horizontal, 6)
-                                    .padding(.vertical, 3)
-                                    .background {
-                                        Capsule()
-                                            .fill(.black.opacity(0.85))
-                                    }
-                            }
-                        }
-                }
             }
             .chartYScale(domain: 0 ... 100)
             .chartXAxis {
                 AxisMarks(values: dailyPoints.map(\.day)) { value in
                     AxisValueLabel {
                         if let date = value.as(Date.self) {
-                            Text(date, format: .dateTime.month(.abbreviated).day())
+                            let parts = Calendar.current.dateComponents([.month, .day], from: date)
+                            Text("\(parts.month ?? 0)-\(parts.day ?? 0)")
                                 .font(.system(size: 8))
                                 .foregroundStyle(.gray)
+                                .fixedSize()
+                                .rotationEffect(.degrees(-45), anchor: .topTrailing)
                         }
                     }
                 }
@@ -423,6 +411,25 @@ private struct UsageHistoryChart: View {
                                 selectedDay = nil
                             }
                         }
+
+                    // tooltip 用 overlay + .position 覆盖定位，不参与 chart 布局，柱子几何保持不动
+                    if let selectedDay,
+                       let point = dailyPoints.first(where: { $0.day == selectedDay }),
+                       let plotAnchor = proxy.plotFrame,
+                       let x = proxy.position(forX: selectedDay) {
+                        let plotOrigin = geo[plotAnchor].origin
+                        Text("\(selectedDay, format: .dateTime.month().day()) \(Int(point.value))%")
+                            .font(.system(size: 9, weight: .medium))
+                            .foregroundStyle(.white)
+                            .padding(.horizontal, 6)
+                            .padding(.vertical, 3)
+                            .background {
+                                Capsule()
+                                    .fill(.black.opacity(0.85))
+                            }
+                            .fixedSize()
+                            .position(x: plotOrigin.x + x, y: max(plotOrigin.y - 10, 8))
+                    }
                 }
             }
             .animation(.easeInOut(duration: 0.15), value: selectedDay)
